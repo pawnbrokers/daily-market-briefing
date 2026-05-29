@@ -352,7 +352,9 @@ def fetch_cn_market():
                 "sort": "fbt:asc", "date": today,
             }
             zt_resp = _em_get_json(zt_url, zt_params)
-            zt_count = len(zt_resp.get("data", {}).get("pool", [])) if zt_resp else 0
+            zt_count = 0
+            if zt_resp and isinstance(zt_resp, dict):
+                zt_count = len((zt_resp.get("data") or {}).get("pool", []))
 
             dt_url = "https://push2ex.eastmoney.com/getTopicDTPool"
             dt_params = {
@@ -361,7 +363,9 @@ def fetch_cn_market():
                 "sort": "fund:asc", "date": today,
             }
             dt_resp = _em_get_json(dt_url, dt_params)
-            dt_count = len(dt_resp.get("data", {}).get("pool", [])) if dt_resp else 0
+            dt_count = 0
+            if dt_resp and isinstance(dt_resp, dict):
+                dt_count = len((dt_resp.get("data") or {}).get("pool", []))
 
             data["limit_stats"] = {
                 "limit_up_count": zt_count,
@@ -394,43 +398,11 @@ def fetch_cn_market():
         except Exception as e:
             data["north_flow"] = {"error": str(e)}
 
-        # ── 4. 板块涨跌（东方财富行业板块资金流向） ──
-        try:
-            sector_url = "https://push2.eastmoney.com/api/qt/clist/get"
-            sector_params = {
-                "pn": "1", "pz": "50", "po": "1", "np": "1",
-                "ut": EM_TOKEN, "fltt": "2", "invt": "2",
-                "fid": "f62",
-                "fs": "m:90+t:2",  # 行业板块
-                "fields": "f12,f14,f2,f3,f62,f184,f66,f69,f72,f75,f78,f81,f84,f87",
-            }
-            sector_resp = _em_get_json(sector_url, sector_params)
-            industry_data = []
-            if sector_resp and sector_resp.get("data") and sector_resp["data"].get("diff"):
-                for item in sector_resp["data"]["diff"]:
-                    pct = _safe_float(item.get("f3"))
-                    main_flow = _safe_float(item.get("f62"))
-                    industry_data.append({
-                        "name": item.get("f14", ""),
-                        "close": _safe_float(item.get("f2")),
-                        "pct_chg": pct,
-                        "main_net_flow": round(main_flow / 1e8, 2) if main_flow else 0,  # 元 -> 亿元
-                        "source": "eastmoney",
-                    })
-            if industry_data:
-                industry_data.sort(key=lambda x: x.get("pct_chg", 0) or 0, reverse=True)
-                data["sectors"] = {
-                    "top": industry_data[:5],
-                    "bottom": industry_data[-3:],
-                }
-        except Exception as e:
-            data["sectors"] = {"error": str(e)}
-
-        # ── 5. 申万一级行业（Tushare，作为板块数据的补充/验证） ──
+        # ── 4. 板块涨跌（Tushare 申万一级行业为主，东方财富补充） ──
         try:
             classify_df = pro.index_classify(level="L1", src="SW2021")
             if classify_df is not None and len(classify_df) > 0:
-                sw_data = []
+                industry_data = []
                 for _, cls_row in classify_df.iterrows():
                     try:
                         sw_df = pro.sw_daily(
@@ -439,7 +411,7 @@ def fetch_cn_market():
                         )
                         if sw_df is not None and len(sw_df) > 0:
                             row = sw_df.iloc[0]
-                            sw_data.append({
+                            industry_data.append({
                                 "name": cls_row["industry_name"],
                                 "close": round(_safe_float(row["close"], 0), 2),
                                 "pct_chg": round(_safe_float(row["pct_change"], 0), 2),
@@ -447,10 +419,42 @@ def fetch_cn_market():
                             })
                     except Exception:
                         continue
-                if sw_data:
-                    data["sw_sectors"] = sw_data  # 作为补充，不覆盖东方财富数据
+                if industry_data:
+                    industry_data.sort(key=lambda x: x.get("pct_chg", 0) or 0, reverse=True)
+                    data["sectors"] = {
+                        "top": industry_data[:5],
+                        "bottom": industry_data[-3:],
+                    }
+        except Exception as e:
+            data["sectors"] = {"error": str(e)}
+
+        # 东方财富行业板块资金流向（补充资金数据，可能被限流）
+        try:
+            sector_url = "https://push2.eastmoney.com/api/qt/clist/get"
+            sector_params = {
+                "pn": "1", "pz": "50", "po": "1", "np": "1",
+                "ut": EM_TOKEN, "fltt": "2", "invt": "2",
+                "fid": "f62",
+                "fs": "m:90+t:2",
+                "fields": "f12,f14,f2,f3,f62,f184,f66,f69,f72,f75,f78,f81,f84,f87",
+            }
+            sector_resp = _em_get_json(sector_url, sector_params)
+            em_industry = []
+            if sector_resp and isinstance(sector_resp, dict) and sector_resp.get("data") and sector_resp["data"].get("diff"):
+                for item in sector_resp["data"]["diff"]:
+                    pct = _safe_float(item.get("f3"))
+                    main_flow = _safe_float(item.get("f62"))
+                    em_industry.append({
+                        "name": item.get("f14", ""),
+                        "close": _safe_float(item.get("f2")),
+                        "pct_chg": pct,
+                        "main_net_flow": round(main_flow / 1e8, 2) if main_flow else 0,
+                        "source": "eastmoney",
+                    })
+            if em_industry:
+                data["em_sectors"] = em_industry  # 作为资金流向补充
         except Exception:
-            pass
+            pass  # 东方财富接口被限流时静默跳过
 
     except Exception as e:
         data["error"] = str(e)
