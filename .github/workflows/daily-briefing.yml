@@ -1,0 +1,44 @@
+name: Daily Market Briefing
+
+on:
+  schedule:
+    # 周一至周五 UTC 0:00 (北京时间 8:00)
+    - cron: '0 0 * * 1-5'
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch market data
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          mkdir -p history logs
+          python3 scripts/fetch_market_data.py --all --output history/data_$(date +%Y-%m-%d).json
+
+      - name: Generate briefing
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          # 使用 AI CLI 或自定义分析逻辑
+          # 这里仅保存数据，AI 分析需要在本地或支持 AI 的 CI 中执行
+          echo "Market data fetched for $DATE"
+          echo "To generate AI briefing, run locally: claude --print < prompt"
+
+      - name: Upload history
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-${{ github.run_id }}
+          path: history/
