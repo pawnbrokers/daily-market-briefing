@@ -1,6 +1,6 @@
-history/
-logs/
 .env
 __pycache__/
 *.pyc
-.DS_Store
+.history/
+logs/
+*.log

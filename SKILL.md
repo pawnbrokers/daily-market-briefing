@@ -1,6 +1,6 @@
 ---
 name: daily-market-briefing
-description: 每日股市晨报工作流。当用户说"晨报"、"每日分析"、"daily briefing"、"市场简报"时触发，或由定时任务自动调用。采集全球宏观数据、A股/港股/美股行情、财经新闻热点，综合研判后输出文档。
+description: 每日股市晨报工作流。当用户说"晨报"、"每日分析"、"daily briefing"、"市场简报"时触发，或由定时任务自动调用。采集全球宏观数据、A股/港股/美股行情、财经新闻热点，综合研判后输出飞书文档。
 ---
 
 # 每日市场晨报
@@ -22,21 +22,21 @@ description: 每日股市晨报工作流。当用户说"晨报"、"每日分析"
 
 #### 1.1 中国市场数据
 ```bash
-python3 scripts/fetch_market_data.py --market cn
+python3 ~/.claude/skills/daily-market-briefing/scripts/fetch_market_data.py --market cn
 ```
-获取：上证/深证/创业板等6大指数、涨跌停统计、北向资金、申万一级行业涨跌
+获取：上证/深证/创业板等6大指数（Tushare主 + 东方财富兜底）、涨跌停统计（东方财富HTTP）、北向资金（Tushare moneyflow_hsgt）、行业板块涨跌及资金流向（东方财富HTTP）
 
 #### 1.2 港股数据
 ```bash
-python3 scripts/fetch_market_data.py --market hk
+python3 ~/.claude/skills/daily-market-briefing/scripts/fetch_market_data.py --market hk
 ```
-获取：恒生指数、恒生科技、南向资金
+获取：恒生指数、恒生科技（新浪实时 + 东方财富K线兜底 + efinance/yfinance兜底）、南向资金（Tushare）
 
 #### 1.3 美股数据
 ```bash
-python3 scripts/fetch_market_data.py --market us
+python3 ~/.claude/skills/daily-market-briefing/scripts/fetch_market_data.py --market us
 ```
-获取：S&P500/NASDAQ/DOW、VIX恐慌指数、美债收益率、美元指数
+获取：S&P500/NASDAQ/DOW（新浪实时 + 东方财富K线兜底 + yfinance兜底）、VIX恐慌指数（yfinance）、美债收益率（yfinance）、美元指数（yfinance）
 
 #### 1.4 宏观与新闻
 使用 WebSearch 工具，搜索以下关键词（每个独立搜索）：
@@ -49,9 +49,9 @@ python3 scripts/fetch_market_data.py --market us
 
 #### 1.5 关键日历
 ```bash
-python3 scripts/fetch_market_data.py --calendar
+python3 ~/.claude/skills/daily-market-briefing/scripts/fetch_market_data.py --calendar
 ```
-获取：今日经济数据发布、财报披露、限售解禁
+获取：中国经济数据发布日程（Tushare cn_schedule）、全球财经日历（东方财富）、交易日历（Tushare）
 
 ### Phase 2: 研判分析
 
@@ -87,9 +87,9 @@ python3 scripts/fetch_market_data.py --calendar
 - 可能的触发条件
 - 对市场的影响路径
 
-### Phase 3: 生成报告文档
+### Phase 3: 生成飞书文档
 
-将 Phase 2 的分析结果整理为以下格式的 Markdown，然后输出文档。
+将 Phase 2 的分析结果整理为以下格式的 Markdown，然后创建飞书文档。
 
 #### 文档标题
 `每日市场晨报 | {YYYY-MM-DD} | {市场定调emoji} {定调文字}`
@@ -166,35 +166,35 @@ python3 scripts/fetch_market_data.py --calendar
 ---
 
 *本报告由 AI 生成，仅供参考，不构成投资建议。*
-*数据来源：Tushare / AKShare / 公开市场数据*
+*数据来源：Tushare / 新浪财经 / 东方财富 / yfinance / efinance（多源交叉验证）*
 *生成时间：{datetime}*
 ```
 
-#### 输出文档
+#### 创建飞书文档
 
 按优先级尝试以下方式：
 
-**方式1：飞书/Lark 文档（推荐）**
+**方式1：lark-cli（推荐）**
 ```bash
-# 需要先配置 lark-cli: lark-cli config init --new
 lark-cli docs +create \
   --title "每日市场晨报 | {date} | {emoji} {stance}" \
   --markdown "{上述模板渲染后的内容}" \
   --api-version v2
 ```
 
-**方式2：Notion / 其他文档平台**
-通过对应的 MCP Server 或 API 创建文档。
+**方式2：MCP lark-docs 工具**
+如果 lark-cli 不可用，使用已配置的 `lark-docs` MCP server 创建文档。
 
 **方式3：本地文件（保底）**
+如果飞书都不可用，将报告保存到本地：
 ```bash
-mkdir -p history
-cat > history/briefing_{date}.md << 'MARKDOWN'
+# 保存到历史目录
+cat > ~/.claude/skills/daily-market-briefing/history/briefing_{date}.md << 'MARKDOWN'
 {markdown_content}
 MARKDOWN
 ```
 
-无论哪种方式，都必须将 Markdown 内容保存到 `history/briefing_{date}.md` 作为存档。
+无论哪种方式，都必须将 Markdown 内容保存到 `~/.claude/skills/daily-market-briefing/history/briefing_{date}.md` 作为存档。
 
 在终端输出文档链接或本地文件路径。
 
@@ -208,21 +208,37 @@ lark-cli im +send --msg-type post \
   --content '{"zh_cn":{"title":"📊 每日市场晨报 | {date}","content":[[{"tag":"text","text":"{市场定调} | 关键信号：{top_signal}"}],[{"tag":"a","text":"查看完整报告","href":"{doc_url}"}]]}}'
 ```
 
-如果推送失败，在终端输出摘要即可。
+如果飞书推送失败，在终端输出摘要即可。
 
 ## 配置项
 
 以下配置通过环境变量或 `.env` 文件设置：
 
-| 变量 | 说明 | 必需 |
-|------|------|------|
-| `TUSHARE_TOKEN` | Tushare API Token | 是 |
-| `FEISHU_FOLDER_TOKEN` | 飞书文档存放目录 | 否 |
-| `FEISHU_CHAT_ID` | 飞书推送群聊 ID | 否 |
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `TUSHARE_TOKEN` | Tushare API Token | 从现有脚本读取 |
+| `FEISHU_FOLDER_TOKEN` | 飞书文档存放目录 | 需配置 |
+| `FEISHU_CHAT_ID` | 飞书推送群聊 ID | 可选 |
+| `BRIEFING_TIME` | 晨报执行时间 | 09:00 |
+
+## 数据源架构
+
+```
+主数据源（优先）          兜底数据源（仅异常时触发）
+─────────────          ──────────────────
+Tushare (A股指数/资金)   efinance (A股/港股/美股实时)
+新浪HTTP (港股/美股实时)  yfinance (美股/港股/VIX/美债)
+东方财富HTTP (涨跌停/板块/日历)
+```
+
+异常检测规则：
+- 数据为空或返回 error → 自动 fallback
+- 涨跌幅 > 15%（大概率数据错误）→ 标记 warning 并 fallback
+- 数据日期超过3天 → 标记 warning 并 fallback
 
 ## 注意事项
 
 - 所有数据采集脚本必须设置超时（30秒），避免卡死
-- 文档创建失败时，必须降级到本地文件，不能丢失分析结果
-- 每次执行后，将当次报告的 Markdown 保存到 `history/{date}.md`
+- 飞书文档创建失败时，必须降级到本地文件，不能丢失分析结果
+- 每次执行后，将当次报告的 Markdown 保存到 `~/.claude/skills/daily-market-briefing/history/{date}.md`
 - 历史报告可用于后续的环比分析
