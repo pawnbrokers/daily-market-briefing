@@ -1,6 +1,6 @@
 # 📊 Daily Market Briefing
 
-> **AI 驱动的每日股市晨报** — 多源数据采集 + AI 智能研判 → 一键输出飞书/本地报告
+> **AI 驱动的每日股市晨报** — 全链路5阶段：数据采集 → 宏观研判 → 板块深挖 → 个股筛选 → 可操作报告
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11+-green.svg)
@@ -23,6 +23,7 @@
 | 美债收益率 | yfinance | — | 10Y国债收益率 |
 | 美元指数 | yfinance | — | DXY |
 | 经济日历 | Tushare cn_schedule + 东方财富 | — | 未来7天重要经济事件 |
+| 个股筛选 | 东方财富HTTP + Tushare | — | 板块龙头/资金流向/基本面/PE/ROE |
 | 新闻热点搜索 | WebSearch | — | 央行政策/美联储/地缘政治/大宗商品 |
 
 **数据源架构**：
@@ -40,7 +41,7 @@ Tushare (A股指数/资金)       efinance (A股/港股/美股实时)
 - 涨跌幅 > 15%（大概率数据错误）→ 标记 warning 并 fallback
 - 数据日期超过3天 → 标记 warning 并 fallback
 
-**输出**：结构化 Markdown 报告（关键信号 + 宏观环境 + 热点板块 + 风险预警 + 操作建议），支持自动推送到**飞书文档**或保存为本地文件。
+**输出**：结构化 Markdown 报告（关键信号 + 宏观环境 + 热点板块+龙头个股 + 风险预警 + 个股操作建议 + 仓位建议），支持自动推送到**飞书文档**或保存为本地文件。
 
 ---
 
@@ -78,6 +79,7 @@ cp .env.example .env
 mkdir -p ~/.claude/skills/daily-market-briefing/scripts
 cp SKILL.md ~/.claude/skills/daily-market-briefing/
 cp scripts/fetch_market_data.py ~/.claude/skills/daily-market-briefing/scripts/
+cp scripts/fetch_stocks.py ~/.claude/skills/daily-market-briefing/scripts/
 cp scripts/run_daily_briefing.sh ~/.claude/skills/daily-market-briefing/scripts/
 chmod +x ~/.claude/skills/daily-market-briefing/scripts/*.sh
 
@@ -179,13 +181,22 @@ crontab -e
 
 ---
 
-## 🔥 热点板块
+## 🔥 热点板块 + 龙头个股
 
 ### 1. 通信 (+4.59%) — AI算力需求持续催化
-- 判断：短期主线
+- 板块涨幅：+4.59% | 主力净流入：39.76亿
+- 持续性判断：短期主线
+
+| 个股 | 收盘 | 涨跌% | 主力流入(亿) | PE | ROE | 营收增速 | 操作 |
+|------|------|-------|-------------|-----|-----|---------|------|
+| 亨通光电 | 77.12 | +9.42% | 39.76 | 43.02 | 3.44% | +34.09% | 买入关注 |
+| 长飞光纤 | 402.81 | +8.71% | 10.39 | 168.38 | 3.53% | +27.70% | 买入关注 |
+
+- 亨通光电：关注区间 74.8-79.6 | 止损参考 69.5 | 逻辑：光通信龙头+业绩高增
+- 长飞光纤：关注区间 390-415 | 止损参考 365 | 逻辑：光纤涨价+净利润增速226%
 
 ### 2. 建筑材料 (+3.78%) — 政策预期驱动
-- 判断：一日游概率大
+- 持续性判断：一日游概率大
 
 ---
 
@@ -227,10 +238,11 @@ crontab -e
 
 ```
 daily-market-briefing/
-├── SKILL.md                          # Claude Code Skill 定义
+├── SKILL.md                          # Claude Code Skill 定义（5阶段工作流）
 ├── scripts/
 │   ├── fetch_market_data.py          # 数据采集脚本（多源交叉验证）
-│   └── run_daily_briefing.sh         # 定时执行入口
+│   ├── fetch_stocks.py               # 个股筛选脚本（板块龙头+基本面）
+│   └── run_daily_briefing.sh         # 定时执行入口（全链路5阶段）
 ├── .env.example                      # 环境变量模板
 ├── .gitignore                        # Git 忽略规则
 ├── requirements.txt                  # Python 依赖
